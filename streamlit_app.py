@@ -421,6 +421,9 @@ def render_distribucion(df_fil, paleta):
     )
 
     df_pos = df_fil[df_fil["VALUE"] > 0].copy()
+    if df_pos.empty:
+        st.warning("⚠️ Sin datos positivos para análisis de distribución con los filtros actuales.")
+        return
 
     # 1. Histograma con KDE
     with st.expander("ℹ️ ¿Cómo leer este gráfico? — Distribución de Generación"):
@@ -514,6 +517,9 @@ def render_correlacion(df_fil, paleta):
     )
 
     df_num = df_fil[["VALUE", "YEAR", "MONTH", "share", "yearToDate"]].dropna()
+    if df_num.empty:
+        st.warning("⚠️ Sin datos numéricos suficientes con los filtros actuales.")
+        return
 
     col1, col2 = st.columns(2)
 
@@ -546,18 +552,21 @@ def render_correlacion(df_fil, paleta):
                     "Identifica patrones, clusters y relaciones no lineales.")
         df_pair = df_fil[df_fil["PRODUCT"].isin(["Solar", "Wind", "Hydro", "Nuclear"])].copy()
         df_pair = df_pair[["VALUE", "YEAR", "share", "PRODUCT"]].dropna()
-        df_pair = df_pair.sample(min(1500, len(df_pair)), random_state=42)
-        df_pair["Fuente"] = df_pair["PRODUCT"].map(PRODUCTOS_ES)
-        df_pair = df_pair.rename(columns={
-            "VALUE": "Generación", "YEAR": "Año", "share": "Participación"
-        })
-        colores_pair = sns.color_palette(paleta, 4)
-        g = sns.pairplot(df_pair[["Generación", "Año", "Participación", "Fuente"]],
-                         hue="Fuente", palette=colores_pair,
-                         plot_kws={"alpha": 0.4, "s": 15}, height=2.2)
-        g.figure.suptitle("Relaciones entre Variables por Fuente Energética",
-                           y=1.02, fontsize=12)
-        st.pyplot(g.figure); plt.close(g.figure)
+        if df_pair.empty:
+            st.warning("⚠️ Sin datos suficientes para el pairplot con los filtros actuales.")
+        else:
+            df_pair = df_pair.sample(min(1500, len(df_pair)), random_state=42)
+            df_pair["Fuente"] = df_pair["PRODUCT"].map(PRODUCTOS_ES)
+            df_pair = df_pair.rename(columns={
+                "VALUE": "Generación", "YEAR": "Año", "share": "Participación"
+            })
+            colores_pair = sns.color_palette(paleta, 4)
+            g = sns.pairplot(df_pair[["Generación", "Año", "Participación", "Fuente"]],
+                             hue="Fuente", palette=colores_pair,
+                             plot_kws={"alpha": 0.4, "s": 15}, height=2.2)
+            g.figure.suptitle("Relaciones entre Variables por Fuente Energética",
+                               y=1.02, fontsize=12)
+            st.pyplot(g.figure); plt.close(g.figure)
 
     # 7. Clustermap
     with st.expander("ℹ️ ¿Cómo leer este gráfico? — Agrupamiento Jerárquico"):
@@ -588,6 +597,9 @@ def render_comparacion(df_fil, paleta):
     )
 
     df_f = df_fil[df_fil["PRODUCT"].isin(FUENTES_PRINCIPALES)].copy()
+    if df_f.empty:
+        st.warning("⚠️ Sin datos para comparar fuentes con los filtros actuales.")
+        return
     df_f["Fuente"] = df_f["PRODUCT"].map(PRODUCTOS_ES)
     colores_c = sns.color_palette(paleta, len(FUENTES_PRINCIPALES))
 
@@ -618,19 +630,26 @@ def render_comparacion(df_fil, paleta):
                     "Forma más ancha = mayor concentración de datos en ese rango de valores.")
         df_f["Década"] = (df_f["YEAR"] // 5 * 5).astype(str) + "s"
         df_viol = df_f[(df_f["VALUE"] > 0) &
-                       (df_f["PRODUCT"].isin(["Solar", "Wind", "Hydro", "Nuclear", "Coal"]))]
+                       (df_f["PRODUCT"].isin(["Solar", "Wind", "Hydro", "Nuclear", "Coal"]))].copy()
         df_viol["Fuente"] = df_viol["PRODUCT"].map(PRODUCTOS_ES)
-        fig, ax = plt.subplots(figsize=(12, 5))
-        sns.violinplot(data=df_viol, x="Fuente", y="VALUE",
-                       hue="Década", palette=paleta, ax=ax,
-                       split=False, inner="quartile", scale="width")
-        ax.set_title("Variabilidad de Generación por Fuente y Período (Violín)", fontsize=13)
-        ax.set_xlabel("Fuente de Energía")
-        ax.set_ylabel("Generación (GWh)")
-        ax.tick_params(axis="x", rotation=20)
-        ax.legend(title="Período", loc="upper right", fontsize=9)
-        plt.tight_layout()
-        st.pyplot(fig); plt.close(fig)
+        if df_viol.empty or df_viol["Fuente"].nunique() == 0:
+            st.warning("⚠️ Sin datos suficientes para el gráfico de violín con los filtros actuales.")
+        else:
+            fig, ax = plt.subplots(figsize=(12, 5))
+            try:
+                sns.violinplot(data=df_viol, x="Fuente", y="VALUE",
+                               hue="Década", palette=paleta, ax=ax,
+                               inner="quartile")
+            except TypeError:
+                sns.violinplot(data=df_viol, x="Fuente", y="VALUE",
+                               palette=paleta, ax=ax, inner="quartile")
+            ax.set_title("Variabilidad de Generación por Fuente y Período (Violín)", fontsize=13)
+            ax.set_xlabel("Fuente de Energía")
+            ax.set_ylabel("Generación (GWh)")
+            ax.tick_params(axis="x", rotation=20)
+            ax.legend(title="Período", loc="upper right", fontsize=9)
+            plt.tight_layout()
+            st.pyplot(fig); plt.close(fig)
 
     col3, col4 = st.columns(2)
 
@@ -639,16 +658,21 @@ def render_comparacion(df_fil, paleta):
         with st.expander("ℹ️ ¿Cómo leer este gráfico? — Puntos Individuales (Stripplot)"):
             st.info("Cada punto es un registro individual. Permite ver la densidad "
                     "y distribución real de los datos sin perder información.")
-        df_strip = df_f[(df_f["VALUE"] > 0)].sample(min(3000, len(df_f)), random_state=42)
-        fig, ax = plt.subplots(figsize=(10, 5))
-        sns.stripplot(data=df_strip, x="Fuente", y="VALUE",
-                      palette=paleta, ax=ax, alpha=0.3, size=3, jitter=True)
-        ax.set_title("Puntos Individuales de Generación por Fuente (Stripplot)", fontsize=13)
-        ax.set_xlabel("Fuente de Energía")
-        ax.set_ylabel("Generación (GWh)")
-        ax.tick_params(axis="x", rotation=30)
-        plt.tight_layout()
-        st.pyplot(fig); plt.close(fig)
+        df_strip_base = df_f[df_f["VALUE"] > 0].copy()
+        if df_strip_base.empty:
+            st.warning("⚠️ Sin datos para el stripplot con los filtros actuales.")
+        else:
+            n_strip = min(3000, len(df_strip_base))
+            df_strip = df_strip_base.sample(n_strip, random_state=42)
+            fig, ax = plt.subplots(figsize=(10, 5))
+            sns.stripplot(data=df_strip, x="Fuente", y="VALUE",
+                          palette=paleta, ax=ax, alpha=0.3, size=3, jitter=True)
+            ax.set_title("Puntos Individuales de Generación por Fuente (Stripplot)", fontsize=13)
+            ax.set_xlabel("Fuente de Energía")
+            ax.set_ylabel("Generación (GWh)")
+            ax.tick_params(axis="x", rotation=30)
+            plt.tight_layout()
+            st.pyplot(fig); plt.close(fig)
 
     # 11. Barplot media ± IC
     with col4:
@@ -698,6 +722,9 @@ def render_temporal(df_fil, paleta):
     )
 
     df_f = df_fil[df_fil["PRODUCT"].isin(FUENTES_PRINCIPALES)].copy()
+    if df_f.empty:
+        st.warning("⚠️ Sin datos temporales con los filtros actuales.")
+        return
     df_f["Fuente"] = df_f["PRODUCT"].map(PRODUCTOS_ES)
 
     # 13. Lineplot anual total multilínea
@@ -770,24 +797,29 @@ def render_temporal(df_fil, paleta):
         st.info("Cada punto es un registro mensual. El color indica la fuente y "
                 "el tamaño refleja la participación porcentual en el total. "
                 "Permite detectar tendencias, dispersión y valores extremos por fuente y año.")
-    df_sc = df_f[(df_f["VALUE"] > 0) & (df_f["share"] > 0)].sample(
-        min(4000, len(df_f)), random_state=42)
-    fig, ax = plt.subplots(figsize=(13, 5))
-    fuentes_sc = ["Solar", "Eólica", "Hidroeléctrica", "Nuclear", "Carbón", "Gas Natural"]
-    df_sc2 = df_sc[df_sc["Fuente"].isin(fuentes_sc)]
-    scatter_pal = dict(zip(fuentes_sc, sns.color_palette(paleta, len(fuentes_sc))))
-    for fuente in fuentes_sc:
-        d = df_sc2[df_sc2["Fuente"] == fuente]
-        ax.scatter(d["YEAR"] + np.random.uniform(-0.3, 0.3, len(d)),
-                   d["VALUE"], c=[scatter_pal[fuente]], alpha=0.4,
-                   s=d["share"].clip(0, 1) * 80 + 5, label=fuente)
-    ax.set_title("Generación vs Año — Color: Fuente · Tamaño: Participación (%)", fontsize=13)
-    ax.set_xlabel("Año")
-    ax.set_ylabel("Generación (GWh)")
-    ax.legend(title="Fuente", bbox_to_anchor=(1.01, 1), loc="upper left", fontsize=9)
-    ax.xaxis.set_major_locator(mticker.MultipleLocator(1))
-    plt.tight_layout()
-    st.pyplot(fig); plt.close(fig)
+    df_sc_base = df_f[(df_f["VALUE"] > 0) & (df_f["share"] > 0)].copy()
+    if df_sc_base.empty:
+        st.warning("⚠️ Sin datos para el scatter con los filtros actuales.")
+    else:
+        df_sc = df_sc_base.sample(min(4000, len(df_sc_base)), random_state=42)
+        fig, ax = plt.subplots(figsize=(13, 5))
+        fuentes_sc = ["Solar", "Eólica", "Hidroeléctrica", "Nuclear", "Carbón", "Gas Natural"]
+        df_sc2 = df_sc[df_sc["Fuente"].isin(fuentes_sc)]
+        scatter_pal = dict(zip(fuentes_sc, sns.color_palette(paleta, len(fuentes_sc))))
+        for fuente in fuentes_sc:
+            d = df_sc2[df_sc2["Fuente"] == fuente]
+            if d.empty:
+                continue
+            ax.scatter(d["YEAR"] + np.random.uniform(-0.3, 0.3, len(d)),
+                       d["VALUE"], c=[scatter_pal[fuente]], alpha=0.4,
+                       s=d["share"].clip(0, 1) * 80 + 5, label=fuente)
+        ax.set_title("Generación vs Año — Color: Fuente · Tamaño: Participación (%)", fontsize=13)
+        ax.set_xlabel("Año")
+        ax.set_ylabel("Generación (GWh)")
+        ax.legend(title="Fuente", bbox_to_anchor=(1.01, 1), loc="upper left", fontsize=9)
+        ax.xaxis.set_major_locator(mticker.MultipleLocator(1))
+        plt.tight_layout()
+        st.pyplot(fig); plt.close(fig)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1141,13 +1173,17 @@ def render_avanzado(df_fil, paleta):
                 f"({n_anom/len(df_anom)*100:.1f}% del total) usando el método IQR.")
 
         fig, ax = plt.subplots(figsize=(13, 5))
-        normales = df_anom[~df_anom["Anomalía"]].sample(min(2000, len(df_anom)), random_state=42)
+        normales_base = df_anom[~df_anom["Anomalía"]]
         anomalos = df_anom[df_anom["Anomalía"]]
+        normales = (normales_base.sample(min(2000, len(normales_base)), random_state=42)
+                    if not normales_base.empty else normales_base)
         color_norm = sns.color_palette(paleta, 3)[1]
-        ax.scatter(normales["YEAR"] + np.random.uniform(-0.3, 0.3, len(normales)),
-                   normales["VALUE"], alpha=0.3, s=8, color=color_norm, label="Normal")
-        ax.scatter(anomalos["YEAR"] + np.random.uniform(-0.3, 0.3, len(anomalos)),
-                   anomalos["VALUE"], alpha=0.7, s=20, color="#e63946", label="Anomalía")
+        if not normales.empty:
+            ax.scatter(normales["YEAR"] + np.random.uniform(-0.3, 0.3, len(normales)),
+                       normales["VALUE"], alpha=0.3, s=8, color=color_norm, label="Normal")
+        if not anomalos.empty:
+            ax.scatter(anomalos["YEAR"] + np.random.uniform(-0.3, 0.3, len(anomalos)),
+                       anomalos["VALUE"], alpha=0.7, s=20, color="#e63946", label="Anomalía")
         ax.axhline(lim_sup, color="orange", linestyle="--", linewidth=1.5,
                    label=f"Límite superior IQR ({lim_sup:,.0f} GWh)")
         ax.set_title("Detección de Anomalías en Generación Eléctrica (Método IQR)", fontsize=13)
