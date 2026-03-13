@@ -703,7 +703,7 @@ def render_comparacion(df_fil, paleta):
     fig, ax = plt.subplots(figsize=(13, 5))
     sns.pointplot(data=df_pt, x="YEAR", y="VALUE", hue="Fuente",
                   palette=paleta, ax=ax, errorbar=None,
-                  markers="o", linestyles="-", markersize=5)
+                  marker="o", linestyle="-", markersize=5)
     ax.set_title("Tendencia de Generación Media por Fuente Energética (2010–2022)", fontsize=13)
     ax.set_xlabel("Año")
     ax.set_ylabel("Generación Media (GWh)")
@@ -735,7 +735,8 @@ def render_temporal(df_fil, paleta):
     anual = df_f.groupby(["YEAR", "Fuente"])["VALUE"].sum().reset_index()
     fig, ax = plt.subplots(figsize=(13, 5))
     sns.lineplot(data=anual, x="YEAR", y="VALUE", hue="Fuente",
-                 palette=paleta, ax=ax, marker="o", linewidth=2.5)
+                 palette=paleta, ax=ax, markers=True, dashes=False,
+                 linewidth=2.5)
     ax.set_title("Generación Anual Total por Fuente Energética (2010–2022)", fontsize=13)
     ax.set_xlabel("Año")
     ax.set_ylabel("Generación Total (GWh)")
@@ -754,13 +755,21 @@ def render_temporal(df_fil, paleta):
                     "picos en verano (solar) o invierno (demanda calefacción).")
         mensual = df_f.groupby(["MONTH", "Fuente"])["VALUE"].mean().reset_index()
         mensual["Mes"] = mensual["MONTH"].map(MESES_ES)
+        # Ordenar por número de mes (lineplot no acepta order=)
+        mensual = mensual.sort_values("MONTH")
+        fuentes_est = ["Solar", "Eólica", "Hidroeléctrica", "Nuclear"]
+        df_est = mensual[mensual["Fuente"].isin(fuentes_est)].copy()
         orden_mes = [MESES_ES[i] for i in range(1, 13)]
         fig, ax = plt.subplots(figsize=(10, 5))
-        fuentes_est = ["Solar", "Eólica", "Hidroeléctrica", "Nuclear"]
-        df_est = mensual[mensual["Fuente"].isin(fuentes_est)]
-        sns.lineplot(data=df_est, x="Mes", y="VALUE", hue="Fuente",
-                     palette=paleta, ax=ax, marker="o", linewidth=2.5,
-                     order=orden_mes)
+        if df_est.empty:
+            ax.text(0.5, 0.5, "Sin datos para estas fuentes",
+                    ha="center", va="center", transform=ax.transAxes)
+        else:
+            colores_est = sns.color_palette(paleta, df_est["Fuente"].nunique())
+            for i, fuente in enumerate(df_est["Fuente"].unique()):
+                d = df_est[df_est["Fuente"] == fuente].sort_values("MONTH")
+                ax.plot(d["Mes"], d["VALUE"], marker="o", linewidth=2.5,
+                        label=fuente, color=colores_est[i])
         ax.set_title("Estacionalidad Mensual — Generación Promedio por Mes", fontsize=13)
         ax.set_xlabel("Mes")
         ax.set_ylabel("Generación Promedio (GWh)")
@@ -992,7 +1001,8 @@ def render_profundo(df_fil, paleta):
                 fig, ax = plt.subplots(figsize=(7, 4))
                 color_src = sns.color_palette(paleta, 3)[1]
                 sns.lineplot(data=anual_plot, x="Año", y="Generación (GWh)",
-                             color=color_src, ax=ax, marker="o", linewidth=2.5)
+                             color=color_src, ax=ax, marker="o", linewidth=2.5,
+                             errorbar=None)
                 ax.fill_between(anual_plot["Año"], anual_plot["Generación (GWh)"],
                                 alpha=0.15, color=color_src)
                 ax.set_title(f"Tendencia Anual — {prod_es}", fontsize=12)
